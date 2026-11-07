@@ -6,7 +6,8 @@ This repository and its releases hold no game files: you supply your own APK and
 
 ## Install
 
-You need Atmosphère with signature patches, DBI, and Docker on a PC for the one-time game-file setup below.
+You need Atmosphère with signature patches, DBI, your own APK and OBB of the game (version below), and Docker
+Desktop on a PC for the one-time game-file setup.
 
 1. Download `cod_st_nx-v0.1.0.zip` from the Releases page and extract it.
 2. Copy the `switch/cod_st/` folder to the root of your SD card.
@@ -23,37 +24,36 @@ The release also has `cod_st.nsp`, which Atmosphère can start in place of anoth
 
 ## Game files
 
-Everything is built from your own copy of the game; nothing here is taken from it. On a PC with Docker, from
-`port/`:
+The port was made and tested with this version of the Android game:
 
-1. `python tools/extract.py <your.apk> <your.obb> ../gamedata`
-2. `python tools/package.py ../gamedata <your.apk> <your.obb> dist/sd`, which gives `game.apk`, `game.obb`
-   and `lib/`. Add `--store` to trade about 1 GB of SD space for faster level loads.
-3. Copy the managed DLLs from `../gamedata/apk/assets/bin/Data/Managed/` to `dist/sd/data/app/managed/`, and
-   `mscorlib.dll` also to `dist/sd/data/app/managed/mono/2.0/`.
-4. Build the ARM harness and compile the DLLs ahead of time. This is slow: a compiler on an emulated CPU,
-   for hours.
-   ```powershell
-   docker run --rm -v "${PWD}:/work" -w /work ghcr.io/vita2hos/devcontainer/vita2hos:latest sh tests/qemu/build.sh
-   docker build --platform linux/arm/v7 -t cod-harness tests/qemu
-   powershell -File tests/qemu/aot_all.ps1
-   ```
-5. Link the results into `.dll.so` files:
-   ```powershell
-   docker run --rm -v "${PWD}:/work" -w /work ghcr.io/vita2hos/devcontainer/vita2hos:latest sh tests/qemu/aot_link.sh dist/sd/data/app/managed dist/sd/data/app/managed
-   ```
-6. Build the shaders, in the toolchain image (it has `uam`, the shader compiler). Run from the folder that
-   holds both `port/` and `gamedata/`:
-   ```powershell
-   docker run --rm -v "${PWD}:/w" -w /w ghcr.io/vita2hos/devcontainer/vita2hos:latest sh -c 'export PATH=$PATH:/opt/devkitpro/tools/bin; python3 port/tools/extract_shaders.py gamedata/shaders/gles gamedata/apk gamedata/obb && python3 port/tools/translate_shaders.py gamedata/shaders/gles gamedata/shaders/out port/dist/sd/shaders.pak'
-   ```
-7. Copy the contents of `dist/sd/` to `sdmc:/switch/cod_st/`.
+| | |
+| --- | --- |
+| Package | `com.activision.callofduty.striketeam` |
+| Version | 1.0.40 (versionCode 15), Unity 4.3.0f4, armeabi-v7a |
+| APK | 37,363,316 bytes, SHA-1 `e468b92901054d2fa0ac92908a97015424d17822` |
+| OBB | `main.15.com.activision.callofduty.striketeam.obb`, 1,037,673,862 bytes, SHA-1 `7e7d910a8956f76d0f0d8756be853bcf6bf12b3d` |
 
-Unity builds a few shaders at runtime. Any it uses that `shaders.pak` lacks are written to
-`sdmc:/switch/cod_st/shader_miss/`; copy that folder next to `gamedata/`, add `--seen shader_miss` to the
-`extract_shaders.py` command in step 6, run it again and copy the new `shaders.pak`.
+Other versions are untested: the port patches and calls into these exact libraries.
 
-Your game data stays yours: do not share `dist/` or `gamedata/`.
+Some of what the console needs is built from your game on a PC: the game's C# code, compiled ahead of time
+(Mono's JIT cannot run there), and its shaders, compiled for the Switch GPU. One script does it all, with
+**Docker Desktop** as the only requirement. From `port/`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup.ps1 -Apk <your.apk> -Obb <your.obb>
+```
+
+It checks your files against the table above, then extracts them, compiles the C# with the game's own Mono
+on an emulated ARM CPU (**this takes hours**), links it, builds `shaders.pak`, and leaves the finished
+folder in `port/dist/cod_st/`. Copy its contents to `sdmc:/switch/cod_st/`, next to `cod_st.nro`. If it is
+stopped, run the same command again: finished steps are skipped. `-Store` keeps the OBB uncompressed, using
+about 1 GB more SD space for faster level loads.
+
+Unity builds a few shaders at runtime. Any that `shaders.pak` lacks are written to
+`sdmc:/switch/cod_st/shader_miss/` and skipped while drawing. Copy that folder to the PC, run
+`setup.ps1 -ShadersOnly -Seen <that folder>` (a few minutes), and copy the new `shaders.pak` over.
+
+Your game data stays yours: do not share `port/dist/` or `gamedata/`.
 
 ## Controls
 
@@ -100,7 +100,7 @@ description of what happened. `port/docs/PORTING.md` lists the switch files (`he
 
 ## Limits
 
-- Tested with one APK (Unity 4.3.0f4, versionName 1.0.40) on firmware 21.2.0. The libraries must match it.
+- Tested with one APK (1.0.40, versionCode 15; see **Game files**) on firmware 21.2.0.
 - Online features, the store and leaderboards have no servers behind them; the game runs offline.
 - The long load before the campaign is the briefing video, which the game waits for.
 - HOME and sleep handling are basic.
