@@ -1,0 +1,24 @@
+# Game data and anything built from it: never commit
+gamedata/
+port/dist/
+dist/
+*.apk
+*.obb
+*.pak
+*.so
+*.dll
+shader_miss/
+# Build output and local tools
+port/build/
+port/build_loader/
+port/builds_tested/
+port/console_logs/
+port/third_party/
+port/tests/qemu/harness
+__pycache__/
+*.elf
+*.nro
+*.nsp
+*.nso
+*.zip
+*.log

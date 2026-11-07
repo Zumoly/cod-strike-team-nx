@@ -1,0 +1,46 @@
+# The installed title's program: a 32-bit loader for sdmc:/switch/cod_st/cod_st.nro (loader_title/).
+# Same toolchain, start-up code (crt0_reloc.c, dcr32.ld) and NPDM as the port.
+#   .\build.ps1 -f Makefile.loader
+# Output: build_loader/loader.nso, then build/title/exefs/main (see docs/PORTING.md).
+
+BUILD    := build_loader
+LIBNX    := $(DEVKITPRO)/libnx32
+CC       := arm-none-eabi-gcc
+FORK     := third_party/libnx32/prefix
+ARCH     := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mfloat-abi=softfp -mfpu=neon-fp-armv8 \
+            -mtp=soft -fPIE -ftls-model=local-exec -marm
+CFLAGS   := $(ARCH) -g -O2 -ffunction-sections -fdata-sections -Wall -Wextra \
+            -D__SWITCH__ -D__ARM32__ -D_GNU_SOURCE -Iinclude -I$(FORK)/include -I$(LIBNX)/include
+LDFLAGS  := -specs=config/dcr32.specs -T config/dcr32.ld $(ARCH) -g -Wl,-Map,$(BUILD)/loader.map
+LIBS     := -L$(FORK)/lib -L$(LIBNX)/lib -lnx -lm
+
+OFILES   := $(BUILD)/main.o $(BUILD)/exc_forward.o $(BUILD)/crt0_reloc.o $(BUILD)/nx32_virtmem.o
+
+.PHONY: all clean
+all: $(BUILD)/loader.nso
+
+$(BUILD)/main.o: loader_title/main.c
+	@mkdir -p $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/exc_forward.o: loader_title/exc_forward.S
+	@mkdir -p $(BUILD)
+	$(CC) $(ARCH) -g -c $< -o $@
+
+# Runs before relocation and before libc exists, so nothing may become a memset call.
+$(BUILD)/crt0_reloc.o: src/rt/crt0_reloc.c
+	@mkdir -p $(BUILD)
+	$(CC) $(CFLAGS) -fno-builtin -fno-tree-loop-distribute-patterns -c $< -o $@
+
+$(BUILD)/nx32_virtmem.o: src/rt/nx32_virtmem.c
+	@mkdir -p $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/loader.elf: $(OFILES)
+	$(CC) $(LDFLAGS) $(OFILES) $(LIBS) -o $@
+
+$(BUILD)/loader.nso: $(BUILD)/loader.elf
+	elf2nso $< $@
+
+clean:
+	rm -rf $(BUILD)
